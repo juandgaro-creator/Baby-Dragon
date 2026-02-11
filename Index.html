@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cuidando a mi Dragón - Supervivencia e IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background: radial-gradient(circle, #1a1a2e, #16213e, #0f3460);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .dragon-container {
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .floating {
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .particle {
+            position: absolute;
+            pointer-events: none;
+            animation: burst 0.8s ease-out forwards;
+            z-index: 50;
+        }
+
+        @keyframes burst {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(0); opacity: 0; transform: translateY(-50px); }
+        }
+
+        .chat-bubble {
+            position: relative;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            min-height: 60px;
+        }
+
+        .shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center p-4 text-white">
+
+    <div id="game-container" class="bg-gray-900/80 backdrop-blur-2xl p-6 rounded-[2rem] shadow-2xl border border-white/10 w-full max-w-lg text-center relative overflow-hidden">
+        
+        <!-- Pantalla de Game Over -->
+        <div id="death-screen" class="absolute inset-0 bg-black/95 z-[100] hidden flex-col items-center justify-center p-6 text-center">
+            <h2 class="text-5xl font-bold text-red-600 mb-4">¡OH NO!</h2>
+            <p class="text-xl mb-8">Tu dragón se ha ido por falta de cuidados...</p>
+            <button onclick="location.reload()" class="bg-white text-black px-8 py-3 rounded-full font-bold hover:bg-gray-200 transition-all">
+                Reintentar
+            </button>
+        </div>
+
+        <!-- Encabezado -->
+        <div class="mb-4">
+            <h1 id="title" class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+                Huevo de Dragón
+            </h1>
+            <p id="status-text" class="text-xs text-gray-400 uppercase tracking-widest mt-1">Nivel 1</p>
+        </div>
+
+        <!-- Burbuja de Diálogo IA -->
+        <div id="ai-bubble" class="chat-bubble p-4 rounded-2xl mb-6 text-sm italic flex items-center justify-center">
+            ¡Hola! Cuida de mí o me debilitaré...
+        </div>
+
+        <!-- Contenedor del Dragón -->
+        <div id="dragon-box" class="dragon-container floating mb-6 relative h-52 flex items-center justify-center">
+            <div id="dragon-visual" class="text-8xl select-none cursor-pointer transform hover:scale-110 transition-transform">
+                🥚
+            </div>
+            <div id="glow" class="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full opacity-0 transition-opacity duration-1000"></div>
+        </div>
+
+        <!-- Estadísticas -->
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
+                <div class="flex justify-between text-[10px] mb-1 text-cyan-400 font-bold uppercase">
+                    <span>Crecimiento</span>
+                    <span id="exp-label">0%</span>
+                </div>
+                <div class="w-full bg-gray-800 rounded-full h-2">
+                    <div id="exp-bar" class="bg-cyan-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+            <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
+                <div class="flex justify-between text-[10px] mb-1 text-red-400 font-bold uppercase">
+                    <span>Hambre</span>
+                    <span id="hunger-label">100%</span>
+                </div>
+                <div class="w-full bg-gray-800 rounded-full h-2">
+                    <div id="hunger-bar" class="bg-red-500 h-2 rounded-full transition-all duration-500" style="width: 100%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controles de Alimentación (Simplificado) -->
+        <div class="grid grid-cols-2 gap-3 mb-4">
+            <button onclick="feed('carne')" class="group relative bg-gradient-to-br from-red-600 to-red-800 p-4 rounded-2xl font-bold shadow-lg hover:scale-[1.02] active:scale-95 transition-all overflow-hidden">
+                <div class="relative z-10 flex flex-col items-center">
+                    <span class="text-2xl mb-1">🍖</span>
+                    <span class="text-xs">Dar Carne</span>
+                </div>
+                <div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            </button>
+            <button onclick="feed('vegetal')" class="group relative bg-gradient-to-br from-green-600 to-green-800 p-4 rounded-2xl font-bold shadow-lg hover:scale-[1.02] active:scale-95 transition-all overflow-hidden">
+                <div class="relative z-10 flex flex-col items-center">
+                    <span class="text-2xl mb-1">🥦</span>
+                    <span class="text-xs">Dar Vegetal</span>
+                </div>
+                <div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            </button>
+        </div>
+
+        <!-- Interacción Extra -->
+        <div class="flex gap-2">
+            <button id="play-btn" class="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl text-sm font-semibold transition-all">
+                ✨ Mimar / Jugar
+            </button>
+            <input type="text" id="chat-input" placeholder="Pregunta algo..." 
+                class="flex-[2] bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500">
+            <button id="chat-btn" class="bg-cyan-600 hover:bg-cyan-500 px-4 py-2 rounded-xl transition-colors font-bold text-sm">
+                💬
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const apiKey = ""; 
+
+        const state = {
+            level: 1,
+            exp: 0,
+            hunger: 100,
+            isDead: false,
+            evolutions: [
+                { emoji: '🥚', name: 'Huevo de Dragón', personality: 'tímido, solo hace sonidos desde adentro.' },
+                { emoji: '🦎', name: 'Bebé Dragón', personality: 'hambriento y juguetón.' },
+                { emoji: '🦖', name: 'Dragón Joven', personality: 'energético y un poco rudo.' },
+                { emoji: '🐉', name: 'Dragón Adulto', personality: 'majestuoso y muy agradecido.' },
+                { emoji: '🐲', name: 'Dragón Divino', personality: 'legendario y sabio.' }
+            ]
+        };
+
+        const dragonVisual = document.getElementById('dragon-visual');
+        const aiBubble = document.getElementById('ai-bubble');
+
+        async function callGemini(prompt, systemPrompt) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] }
+            };
+
+            try {
+                const response = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
+                const data = await response.json();
+                return data.candidates?.[0]?.content?.parts?.[0]?.text || "...";
+            } catch (e) {
+                return "¡Raaawr! (Estoy procesando)";
+            }
+        }
+
+        async function updateAI(context, input = "") {
+            const evo = getEvo();
+            const prompt = input || `Reacciona a: ${context}`;
+            const system = `Eres un ${evo.name} con personalidad ${evo.personality}. 
+            Responde en español muy breve (10 palabras max). 
+            Si el hambre es baja (< 20%), suénate débil o desesperado.`;
+            
+            const reply = await callGemini(prompt, system);
+            aiBubble.innerText = reply;
+        }
+
+        function feed(type) {
+            if (state.isDead) return;
+            
+            const amount = type === 'carne' ? 25 : 15;
+            const expGain = type === 'carne' ? 10 : 15; // Los vegetales dan más crecimiento pero menos saciedad
+            
+            state.hunger = Math.min(100, state.hunger + amount);
+            state.exp = Math.min(100, state.exp + expGain);
+            
+            createParticle(window.innerWidth/2, window.innerHeight/2, type === 'carne' ? '🍖' : '🥦');
+            updateAI(`Me has dado de comer ${type}`);
+            updateUI();
+        }
+
+        function getEvo() {
+            let phase = 0;
+            if (state.level === 1 && state.exp < 30) phase = 0;
+            else if (state.level === 1) phase = 1;
+            else if (state.level === 2) phase = 2;
+            else if (state.level === 3) phase = 3;
+            else phase = 4;
+            return state.evolutions[phase];
+        }
+
+        function updateUI() {
+            if (state.isDead) return;
+
+            document.getElementById('exp-bar').style.width = `${state.exp}%`;
+            document.getElementById('exp-label').innerText = `${state.exp}%`;
+            document.getElementById('hunger-bar').style.width = `${state.hunger}%`;
+            document.getElementById('hunger-label').innerText = `${Math.floor(state.hunger)}%`;
+
+            const evo = getEvo();
+            if (dragonVisual.innerText !== evo.emoji) {
+                dragonVisual.innerText = evo.emoji;
+                document.getElementById('title').innerText = evo.name;
+                document.getElementById('status-text').innerText = `Nivel ${state.level}`;
+                triggerLevelUpEffect();
+            }
+
+            // Peligro de muerte
+            if (state.hunger < 20) {
+                document.getElementById('game-container').classList.add('shake');
+                document.getElementById('hunger-bar').classList.add('animate-pulse');
+            } else {
+                document.getElementById('game-container').classList.remove('shake');
+                document.getElementById('hunger-bar').classList.remove('animate-pulse');
+            }
+
+            if (state.hunger <= 0) {
+                gameOver();
+            }
+            
+            dragonVisual.style.fontSize = `${5 + (state.level * 1.2)}rem`;
+        }
+
+        function gameOver() {
+            state.isDead = true;
+            document.getElementById('death-screen').classList.remove('hidden');
+            document.getElementById('death-screen').classList.add('flex');
+        }
+
+        function triggerLevelUpEffect() {
+            const glow = document.getElementById('glow');
+            glow.style.opacity = '1';
+            setTimeout(() => glow.style.opacity = '0', 1000);
+            if (state.exp >= 100 && state.level < 5) {
+                state.level++;
+                state.exp = 0;
+                updateUI();
+            }
+        }
+
+        function createParticle(x, y, emoji) {
+            const p = document.createElement('div');
+            p.className = 'particle text-2xl';
+            p.innerText = emoji;
+            p.style.left = x + 'px';
+            p.style.top = y + 'px';
+            document.body.appendChild(p);
+            setTimeout(() => p.remove(), 800);
+        }
+
+        // Eventos
+        document.getElementById('chat-btn').onclick = () => {
+            const text = document.getElementById('chat-input').value.trim();
+            if (text) {
+                updateAI("", text);
+                document.getElementById('chat-input').value = "";
+            }
+        };
+
+        document.getElementById('play-btn').onclick = (e) => {
+            state.exp = Math.min(100, state.exp + 5);
+            state.hunger = Math.max(0, state.hunger - 4);
+            createParticle(e.clientX, e.clientY, '✨');
+            updateUI();
+        };
+
+        // El hambre baja más rápido para añadir dificultad
+        setInterval(() => {
+            if (!state.isDead) {
+                state.hunger = Math.max(0, state.hunger - 1);
+                updateUI();
+            }
+        }, 1500);
+
+        updateUI();
+    </script>
+</body>
+</html>
